@@ -158,33 +158,32 @@ void display_method(const char *filename, uint16_t count, ConstantPoolResult *po
             f_index = to_big_endian_16(f_index);
 
             printf("Atribute Count: %u\n", f_index);
+
+            uint16_t amount = f_index;
+
+            char* result;
+
             pos->position = pos->position + 2;
             if (f_index != 0){
-                
-                read_bytes(file, &f_index, sizeof(f_index), pos->position);
+                for (int i = 0; i < amount; i++){
+                    read_bytes(file, &f_index, sizeof(f_index), pos->position);
 
-                f_index = to_big_endian_16(f_index);
+                    f_index = to_big_endian_16(f_index);
 
-                printf("          Atribute Name Index: %u\n                    Utf8: ", f_index);
-                for (int i = 0; i < pos->position; i++){
-                    if(f_index == pos->constant_positions[i].index){
-                        display_constant(file, pos->constant_positions[i].index, pos->constant_positions[i].position, pos->constant_positions[i].tag, pos->constant_positions, pos->constant_positions_count, 10);
-                        pos->position = pos->position + 2;
-                        break;
+                    printf("          Atribute Name Index: %u\n                    Utf8: ", f_index);
+                    for (int i = 0; i < pos->position; i++){
+                        if(f_index == pos->constant_positions[i].index){
+                            result = display_constant(file, pos->constant_positions[i].index, pos->constant_positions[i].position, pos->constant_positions[i].tag, pos->constant_positions, pos->constant_positions_count, 10);
+                            pos->position = pos->position + 2;
+                            break;
+                        }
                     }
-                }
 
-                uint32_t f_atribute;
-
-                read_bytes(file, &f_atribute, sizeof(f_atribute), pos->position);
-
-                f_atribute = to_big_endian_32(f_atribute);
-
-                printf("          Atribute Lenght: %u\n          ", f_atribute);
-                pos->position = pos->position + 4;
-
-                pos->position = pos->position + f_atribute;
-
+                    if (strcmp(result, "Code") == 0){
+                        display_atribute_info(filename, pos, 1);
+                        free(result);
+                    }
+                }   
             }
         }
     }
@@ -218,10 +217,10 @@ void display_atribute(const char *filename, uint16_t count, ConstantPoolResult *
 
             read_bytes(file, &f_atribute, sizeof(f_atribute), pos->position);
 
-
-
             f_atribute = to_big_endian_32(f_atribute);
+
             printf("Atribute Lenght: %u\n", f_atribute);
+
             pos->position = pos->position + 4;
 
             read_bytes(file, &f_index, sizeof(f_index), pos->position);

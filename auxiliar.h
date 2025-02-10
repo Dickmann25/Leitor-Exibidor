@@ -15,6 +15,14 @@ typedef struct {
     uint8_t tag;
 } IndexPosition;
 
+typedef struct {
+    uint8_t opcode;
+    const char *mnemonic;
+    uint8_t operand_count;
+} OpcodeInfo;
+
+extern OpcodeInfo opcode_table[256];
+
 uint32_t to_big_endian_32(uint32_t value);
 uint16_t to_big_endian_16(uint16_t value);
 FILE* abre_arquivo(const char *filename);

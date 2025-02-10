@@ -1,6 +1,8 @@
 #include "read_func.h"
 
-void display_constant(FILE *file, uint16_t index, long position, uint8_t tag, IndexPosition *dic, size_t constant_positions_count, int indent) {
+ConstantPoolResult result_struct;
+
+char* display_constant(FILE *file, uint16_t index, long position, uint8_t tag, IndexPosition *dic, size_t constant_positions_count, int indent) {
     
     switch (tag) {
         case 1: { // CONSTANT_Utf8
@@ -25,10 +27,16 @@ void display_constant(FILE *file, uint16_t index, long position, uint8_t tag, In
             
             // Exibe a string UTF-8
             printf("%s\n", utf8_string);
-
-            // Libera a memória alocada
+            if (strcmp(utf8_string, "Code") == 0){
+                strcpy(utf8_string, "Code");
+                return utf8_string;
+            }
+            
+            else if (strcmp(utf8_string, "LineNumberTable") == 0){
+                strcpy(utf8_string, "LineNumberTable");
+                return utf8_string;
+            }
             free(utf8_string);
-
             break;
         }
         case 3: { // CONSTANT_Integer
@@ -130,12 +138,13 @@ void display_constant(FILE *file, uint16_t index, long position, uint8_t tag, In
             name_and_type_index = to_big_endian_16(name_and_type_index);
 
             // Exibe os índices
-            printf("Fieldref: Class index %u, Name and Type index %u\n", class_index, name_and_type_index);
+            printf("Fieldref: Class index %u, Name and Type index %u\n%*s", class_index, name_and_type_index,  indent, "");
 
             position = find_position_by_index(dic, class_index, constant_positions_count);
             // Exibe os detalhes da classe
             display_constant(file, class_index, position, 7, dic, constant_positions_count, indent + 10); // Exibe o CONSTANT_Class associado ao índice
 
+            printf("%*s", indent, "");
             position = find_position_by_index(dic, name_and_type_index, constant_positions_count);
             // Exibe os detalhes do name_and_type
             display_constant(file, name_and_type_index, position, 12, dic, constant_positions_count, indent + 10); // Exibe o CONSTANT_NameAndType associado ao índice
@@ -326,6 +335,207 @@ void display_constant(FILE *file, uint16_t index, long position, uint8_t tag, In
             printf("Unknown constant type (tag %d)\n", tag);
             break;
         
+    }
+}
+
+void display_atribute_info(const char *filename, ConstantPoolResult *pos, uint16_t tag){
+    FILE *file = fopen(filename, "rb");
+
+    uint16_t f_index;
+
+    uint32_t f_atribute;
+    switch (tag)
+    {
+    case 1: {
+            read_bytes(file, &f_atribute, sizeof(f_atribute), pos->position);
+
+            f_atribute = to_big_endian_32(f_atribute);
+
+            printf("          Atribute Lenght: %u\n          ", f_atribute);
+            pos->position = pos->position + 4;
+
+            read_bytes(file, &f_index, sizeof(f_index), pos->position);
+
+            f_index = to_big_endian_16(f_index);
+
+            printf("Maximum Stack Size: %u\n", f_index);
+
+            pos->position = pos->position + 2;
+
+            read_bytes(file, &f_index, sizeof(f_index), pos->position);
+
+            f_index = to_big_endian_16(f_index);
+
+            printf("          Maximum Local Variables: %u\n", f_index);
+
+            pos->position = pos->position + 2;
+
+            read_bytes(file, &f_atribute, sizeof(f_atribute), pos->position);
+
+            f_atribute = to_big_endian_32(f_atribute);
+
+            printf("          Code Lenght: %u\n", f_atribute);
+
+            pos->position = pos->position + 4;
+
+            long dic_pos;
+            long position = pos->position;
+            while (position < pos->position + f_atribute) {
+                uint8_t opcode;
+                read_bytes(file, &opcode, sizeof(opcode), position); // Lê o opcode
+                position++;
+
+                printf("%04ld: %s", position - pos->position - 1, opcode_table[opcode].mnemonic);
+
+                uint8_t operand_count = opcode_table[opcode].operand_count;
+                uint8_t operands[2] = {0}; // Para armazenar operandos (máx. 2 bytes)
+
+                if (operand_count > 0) {
+                    read_bytes(file, operands, operand_count, position); // Lê os operandos
+                    position += operand_count;
+
+                    // Se for uma referência à constant pool, converte para inteiro
+                    if (operand_count == 2) {
+                        uint16_t index = (operands[0] << 8) | operands[1]; // Converte para big-endian
+                        printf(" (#%d)\n", index);
+
+                        for (int i = 0; i < pos->position; i++){
+                        if(index == pos->constant_positions[i].index){
+                            display_constant(file, pos->constant_positions[i].index, pos->constant_positions[i].position, pos->constant_positions[i].tag, pos->constant_positions, pos->constant_positions_count, 10);
+                            break;
+                        }
+                    }
+                    
+                    }
+
+
+                }
+
+                printf("\n"); // Nova linha para próximo opcode
+            }
+            pos->position = position;
+
+            read_bytes(file, &f_index, sizeof(f_index), pos->position);
+
+            f_index = to_big_endian_16(f_index);
+
+            printf("\nException Table Lenght: %u\n", f_index);
+
+            pos->position = pos->position + 2;
+
+            if(f_index != 0){
+                for (int i = 1; i < f_index; i++){
+
+                    read_bytes(file, &f_index, sizeof(f_index), pos->position);
+
+                    f_index = to_big_endian_16(f_index);
+                    
+                    printf("\nStart PC: %u\n", f_index);
+
+                    pos->position = pos->position + 2;
+
+                    read_bytes(file, &f_index, sizeof(f_index), pos->position);
+
+                    f_index = to_big_endian_16(f_index);
+                    
+                    printf("\nEnd PC: %u\n", f_index);
+
+                    pos->position = pos->position + 2;
+
+                    read_bytes(file, &f_index, sizeof(f_index), pos->position);
+
+                    f_index = to_big_endian_16(f_index);
+                    
+                    printf("\nHandler PC: %u\n", f_index);
+
+                    pos->position = pos->position + 2;
+
+                    read_bytes(file, &f_index, sizeof(f_index), pos->position);
+
+                    f_index = to_big_endian_16(f_index);
+                    
+                    printf("\nCatch Type: %u\n", f_index);
+
+                    pos->position = pos->position + 2;
+
+                }
+            }
+            
+            read_bytes(file, &f_index, sizeof(f_index), pos->position);
+            
+            f_index = to_big_endian_16(f_index);
+                
+            printf("\nCode Atribute Count: %u\n", f_index);
+
+            pos->position = pos->position + 2;
+
+            read_bytes(file, &f_index, sizeof(f_index), pos->position);
+            
+            f_index = to_big_endian_16(f_index);
+                
+            printf("\nCode Atribute Name Index: %u\n          ", f_index);
+
+            pos->position = pos->position + 2;
+
+            char* result;
+
+            for (int i = 0; i < pos->position; i++){
+                if(f_index == pos->constant_positions[i].index){
+                    result = display_constant(file, pos->constant_positions[i].index, pos->constant_positions[i].position, pos->constant_positions[i].tag, pos->constant_positions, pos->constant_positions_count, 10);
+                    break;
+                }
+            }
+            if (strcmp(result, "LineNumberTable") == 0){
+                display_atribute_info(filename, pos, 2);
+                free(result);
+            }
+        break;
+        }
+    
+    case 2: {            
+            
+            read_bytes(file, &f_atribute, sizeof(f_atribute), pos->position);
+
+            f_atribute = to_big_endian_32(f_atribute);
+                
+            printf("\nCode Atribute Lenght: %u\n          ", f_atribute);
+            
+            pos->position = pos->position + 4;
+
+            read_bytes(file, &f_index, sizeof(f_index), pos->position);
+            
+            f_index = to_big_endian_16(f_index);
+
+            pos->position = pos->position + 2;
+
+            printf("\nNr.       Start Pc        Line number\n");
+            
+            uint16_t temp;
+            
+            for (int i = 0; i < f_index; i++){
+
+                read_bytes(file, &temp, sizeof(temp), pos->position);
+                
+                temp = to_big_endian_16(temp);
+
+                printf("%i        %u                ", i, temp);
+
+                pos->position = pos->position + 2;
+
+                read_bytes(file, &temp, sizeof(temp), pos->position);
+                
+                temp = to_big_endian_16(temp);
+
+                printf("%u\n", temp);
+
+                pos->position = pos->position + 2;
+            }
+
+        break;
+    }
+    
+    default:
+        break;
     }
 }
 
